@@ -311,7 +311,7 @@ export const BarcodeScanner = ({ onDetected, onClose }: Props) => {
         <video
           ref={videoRef}
           onClick={onTapVideo}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           playsInline
           muted
           autoPlay
