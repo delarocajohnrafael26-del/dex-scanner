@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
       - name: Setup Node
         uses: actions/setup-node@v3
@@ -18,16 +19,19 @@ jobs:
 
       - name: Install Capacitor
         run: |
-          npm init -y
           npm install @capacitor/core @capacitor/cli
 
       - name: Init Capacitor
         run: |
-          npx cap init dexscanner com.dex.scanner --web-dir=.
+          npx cap init "Dex Scanner" "com.dex.scanner" --web-dir=.
 
       - name: Add Android
         run: |
           npx cap add android
+
+      - name: Copy files
+        run: |
+          npx cap copy
 
       - name: Build APK
         run: |
