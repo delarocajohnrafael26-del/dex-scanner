@@ -14,7 +14,86 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alerts: {
+        Row: {
+          batch_index: number
+          created_at: string
+          dismissed_at: string | null
+          expiry_date: string
+          first_shown_at: string
+          id: string
+          last_shown_at: string
+          product_id: string
+          severity: string
+        }
+        Insert: {
+          batch_index: number
+          created_at?: string
+          dismissed_at?: string | null
+          expiry_date: string
+          first_shown_at?: string
+          id?: string
+          last_shown_at?: string
+          product_id: string
+          severity: string
+        }
+        Update: {
+          batch_index?: number
+          created_at?: string
+          dismissed_at?: string | null
+          expiry_date?: string
+          first_shown_at?: string
+          id?: string
+          last_shown_at?: string
+          product_id?: string
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          barcode: string
+          category: string | null
+          created_at: string
+          expiry_1: string | null
+          expiry_2: string | null
+          expiry_3: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          barcode: string
+          category?: string | null
+          created_at?: string
+          expiry_1?: string | null
+          expiry_2?: string | null
+          expiry_3?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Update: {
+          barcode?: string
+          category?: string | null
+          created_at?: string
+          expiry_1?: string | null
+          expiry_2?: string | null
+          expiry_3?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
