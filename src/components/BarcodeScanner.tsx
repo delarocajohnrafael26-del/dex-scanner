@@ -157,12 +157,10 @@ export const BarcodeScanner = ({ onDetected, onClose }: Props) => {
     if (devices.length < 2) return;
     const next = (deviceIdx + 1) % devices.length;
     setDeviceIdx(next);
-    const reader = new BrowserMultiFormatReader(
-      new Map([
-        [DecodeHintType.POSSIBLE_FORMATS, FORMATS],
-        [DecodeHintType.TRY_HARDER, true],
-      ])
-    );
+    const hints2 = new Map<DecodeHintType, unknown>();
+    hints2.set(DecodeHintType.POSSIBLE_FORMATS, FORMATS);
+    hints2.set(DecodeHintType.TRY_HARDER, true);
+    const reader = new BrowserMultiFormatReader(hints2 as any);
     try {
       controlsRef.current?.stop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
