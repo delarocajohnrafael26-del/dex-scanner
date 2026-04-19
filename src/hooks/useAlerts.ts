@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert } from "@/lib/types";
 import { differenceInCalendarDays, parseISO } from "date-fns";
@@ -9,21 +9,24 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
  */
 export function useActiveAlertCount() {
   const [count, setCount] = useState(0);
+  const idRef = useRef(`alerts-count-${Math.random().toString(36).slice(2)}`);
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
       const { data } = await supabase
         .from("alerts")
-        .select("*")
+        .select("id")
         .is("dismissed_at", null);
-      setCount((data ?? []).length);
+      if (active) setCount((data ?? []).length);
     };
     load();
     const channel = supabase
-      .channel("alerts-count")
+      .channel(idRef.current)
       .on("postgres_changes", { event: "*", schema: "public", table: "alerts" }, load)
       .subscribe();
     return () => {
+      active = false;
       supabase.removeChannel(channel);
     };
   }, []);
