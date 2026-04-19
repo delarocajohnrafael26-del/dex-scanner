@@ -1,0 +1,1 @@
+{ "appId": "com.dexscanner.app", "appName": "Dex Scanner", "webDir": "dist", "server": { "androidScheme": "https" }, "plugins": { "SplashScreen": { "launchShowDuration": 0 } } }
