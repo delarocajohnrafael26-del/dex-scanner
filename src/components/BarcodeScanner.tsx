@@ -37,11 +37,11 @@ export const BarcodeScanner = ({ onDetected, onClose }: Props) => {
   const firedRef = useRef(false);
 
   useEffect(() => {
-    const hints = new Map();
+    const hints = new Map<DecodeHintType, unknown>();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATS);
     hints.set(DecodeHintType.TRY_HARDER, true);
 
-    const reader = new BrowserMultiFormatReader(hints, {
+    const reader = new BrowserMultiFormatReader(hints as any, {
       delayBetweenScanAttempts: 80,
       delayBetweenScanSuccess: 300,
     });
