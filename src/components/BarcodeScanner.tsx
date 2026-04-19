@@ -78,38 +78,56 @@ export const BarcodeScanner = ({ onDetected, onClose }: Props) => {
     const buf = confidenceRef.current;
     if (buf.code === code) buf.count += 1;
     else confidenceRef.current = { code, count: 1 };
-    if (confidenceRef.current.count >= 2) {
+    // 12+ digit retail barcodes (EAN/UPC) have built-in checksums — 1 read is reliable.
+    const threshold = code.length >= 12 ? 1 : 2;
+    if (confidenceRef.current.count >= threshold) {
       firedRef.current = true;
       setStatus("found");
+      console.log("[scanner] locked:", code);
       if (navigator.vibrate) navigator.vibrate([60, 30, 30]);
-      // small delay so user sees "Detected" flash
       setTimeout(() => onDetected(code), 120);
     }
   };
 
   const startStream = async (deviceId?: string) => {
     cleanup();
-    const constraints: MediaStreamConstraints = {
-      video: {
-        ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } }),
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 },
-        // @ts-expect-error non-standard
-        focusMode: "continuous",
-      },
-      audio: false,
-    };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const baseVideo: any = deviceId
+      ? { deviceId: { exact: deviceId } }
+      : { facingMode: { ideal: "environment" } };
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { ...baseVideo, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        audio: false,
+      });
+    } catch {
+      console.warn("[scanner] HD failed, trying 1280x720");
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { ...baseVideo, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch {
+        console.warn("[scanner] 720p failed, falling back to default");
+        stream = await navigator.mediaDevices.getUserMedia({ video: baseVideo, audio: false });
+      }
+    }
     streamRef.current = stream;
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
-      await videoRef.current.play().catch(() => {});
+      videoRef.current.setAttribute("playsinline", "true");
+      await videoRef.current.play().catch((e) => console.warn("[scanner] play() failed", e));
     }
     const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings?.() ?? {};
+    console.log("[scanner] camera:", settings.width, "x", settings.height, "@", settings.frameRate, "fps");
     const caps: any = track.getCapabilities?.() ?? {};
     setTorchSupported(!!caps.torch);
     setTorchOn(false);
+    try {
+      // @ts-expect-error non-standard
+      await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+    } catch {}
     return stream;
   };
 
