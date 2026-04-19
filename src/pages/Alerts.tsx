@@ -1,22 +1,56 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, Product } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Lock, X, RefreshCw } from "lucide-react";
+import { Bell, X, RefreshCw } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { canDismissAlert, daysUntilDismissable } from "@/hooks/useAlerts";
 import { syncAlerts } from "@/lib/syncAlerts";
 import { toast } from "sonner";
 import { daysLeft, severityColor } from "@/lib/expiry";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Joined = Alert & { product: Product | null };
+
+// Short beep using WebAudio — no asset needed
+function playAlertSound() {
+  try {
+    const Ctx =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    o.frequency.setValueAtTime(660, ctx.currentTime + 0.18);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.5);
+  } catch {
+    /* noop */
+  }
+}
 
 export default function Alerts() {
   const [alerts, setAlerts] = useState<Joined[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [pending, setPending] = useState<Joined | null>(null);
+  const prevCountRef = useRef<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -25,7 +59,13 @@ export default function Alerts() {
       .select("*, product:products(*)")
       .is("dismissed_at", null)
       .order("expiry_date", { ascending: true });
-    setAlerts((data ?? []) as any);
+    const next = (data ?? []) as any as Joined[];
+    // Play sound if new alerts appeared since last load
+    if (prevCountRef.current !== null && next.length > prevCountRef.current) {
+      playAlertSound();
+    }
+    prevCountRef.current = next.length;
+    setAlerts(next);
     setLoading(false);
   };
 
@@ -33,14 +73,15 @@ export default function Alerts() {
     (async () => {
       await syncAlerts();
       await load();
+      // Initial sound if there are any active alerts on entry
+      if ((prevCountRef.current ?? 0) > 0) playAlertSound();
     })();
   }, []);
 
-  const dismiss = async (a: Joined) => {
-    if (!canDismissAlert(a)) {
-      toast.error(`Locked for ${daysUntilDismissable(a)} more day(s)`);
-      return;
-    }
+  const confirmDismiss = async () => {
+    if (!pending) return;
+    const a = pending;
+    setPending(null);
     const { error } = await supabase
       .from("alerts")
       .update({ dismissed_at: new Date().toISOString() })
@@ -48,6 +89,7 @@ export default function Alerts() {
     if (error) return toast.error(error.message);
     toast.success("Alert cleared");
     setAlerts((arr) => arr.filter((x) => x.id !== a.id));
+    prevCountRef.current = Math.max(0, (prevCountRef.current ?? 1) - 1);
   };
 
   const refresh = async () => {
@@ -67,7 +109,7 @@ export default function Alerts() {
         <div>
           <h1 className="font-display text-2xl font-bold">Alerts</h1>
           <p className="text-sm text-muted-foreground">
-            {alerts.length} active · locked 5 days from first appearance
+            {alerts.length} active · dismiss anytime
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={refresh} disabled={syncing}>
@@ -85,19 +127,32 @@ export default function Alerts() {
         </Card>
       ) : (
         <div className="space-y-5">
-          {expired.length > 0 && <Section title="Expired" items={expired} onDismiss={dismiss} />}
+          {expired.length > 0 && (
+            <Section title="Expired" items={expired} onDismiss={setPending} />
+          )}
           {warning.length > 0 && (
-            <Section title="Near expiration (≤30 days)" items={warning} onDismiss={dismiss} />
+            <Section title="Near expiration (≤30 days)" items={warning} onDismiss={setPending} />
           )}
         </div>
       )}
 
-      <Card className="border-border/60 bg-muted/30 p-4">
-        <p className="text-xs text-muted-foreground">
-          🔒 Alerts are locked for <strong>5 days</strong> from first appearance and cannot be dismissed
-          during that period. Once unlocked, they re-pop daily until you clear them.
-        </p>
-      </Card>
+      <AlertDialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dismiss this alert?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pending?.product?.name || pending?.product?.barcode || "This alert"} ·
+              batch {pending?.batch_index} · expires{" "}
+              {pending && format(parseISO(pending.expiry_date), "MMM d, yyyy")}.
+              It will stop appearing in your alerts list.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDismiss}>Yes, dismiss</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -117,8 +172,6 @@ const Section = ({
     </p>
     <div className="space-y-2">
       {items.map((a) => {
-        const can = canDismissAlert(a);
-        const left = daysUntilDismissable(a);
         const d = daysLeft(a.expiry_date);
         return (
           <Card key={a.id} className="overflow-hidden">
@@ -141,22 +194,16 @@ const Section = ({
                   >
                     {a.severity === "expired" ? `${Math.abs(d!)}d ago` : `in ${d}d`}
                   </Badge>
-                  {!can && (
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Lock className="h-3 w-3" /> {left}d to unlock
-                    </span>
-                  )}
                 </div>
               </div>
               <Button
                 size="icon"
                 variant="ghost"
                 onClick={() => onDismiss(a)}
-                disabled={!can}
                 className="shrink-0"
                 aria-label="Dismiss"
               >
-                {can ? <X className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                <X className="h-4 w-4" />
               </Button>
             </div>
           </Card>
