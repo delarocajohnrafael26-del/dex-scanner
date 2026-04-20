@@ -1,0 +1,1 @@
+ALTER TABLE public.products ADD CONSTRAINT products_user_barcode_unique UNIQUE (user_id, barcode);
