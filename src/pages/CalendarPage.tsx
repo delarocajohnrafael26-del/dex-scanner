@@ -124,9 +124,10 @@ export default function CalendarPage() {
     setPending(null);
     const key = (`expiry_${it.batch}` as const) as "expiry_1" | "expiry_2" | "expiry_3";
     // Clear the expiry date on the product (dismisses from calendar + alerts)
+    const patch: Record<string, null> = { [key]: null };
     const { error } = await supabase
       .from("products")
-      .update({ [key]: null })
+      .update(patch as any)
       .eq("id", it.product.id);
     if (error) return toast.error(error.message);
     // Also dismiss any matching alert row
