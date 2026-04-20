@@ -9,6 +9,7 @@ import Products from "./pages/Products";
 import CalendarPage from "./pages/CalendarPage";
 import Alerts from "./pages/Alerts";
 import ImportPage from "./pages/ImportPage";
+import AuthPage from "./pages/Auth";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          <Route path="/auth" element={<AuthPage />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<Scan />} />
             <Route path="/products" element={<Products />} />
