@@ -12,6 +12,7 @@ import { Product } from "@/lib/types";
 import { toast } from "sonner";
 import { syncAlerts } from "@/lib/syncAlerts";
 import { useActiveAlertCount } from "@/hooks/useAlerts";
+import { barcodeCandidates, normalizeBarcode } from "@/lib/barcode";
 
 export default function Scan() {
   const [open, setOpen] = useState(false);
@@ -35,10 +36,17 @@ export default function Scan() {
 
   const lookup = async (barcode: string) => {
     setOpen(false);
-    setCode(barcode);
+    const normalized = normalizeBarcode(barcode);
+    setCode(normalized);
     setProduct(null);
     setNotFound(false);
-    const { data } = await supabase.from("products").select("*").eq("barcode", barcode).maybeSingle();
+    const candidates = barcodeCandidates(normalized);
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .in("barcode", candidates)
+      .limit(1)
+      .maybeSingle();
     if (data) {
       setProduct(data as Product);
       toast.success("Product found");
@@ -49,9 +57,19 @@ export default function Scan() {
 
   const createProduct = async () => {
     setCreating(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setCreating(false);
+      return toast.error("Please sign in");
+    }
     const { data, error } = await supabase
       .from("products")
-      .insert({ barcode: code, name: newName || "Unnamed", category: newCategory || null })
+      .insert({
+        barcode: code,
+        name: newName || "Unnamed",
+        category: newCategory || null,
+        user_id: user.id,
+      })
       .select()
       .single();
     setCreating(false);

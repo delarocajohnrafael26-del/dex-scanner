@@ -6,6 +6,7 @@ import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle } from "lu
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Product } from "@/lib/types";
+import { normalizeBarcode } from "@/lib/barcode";
 
 type Row = {
   barcode: string;
@@ -57,7 +58,7 @@ export default function ImportPage() {
     const json = XLSX.utils.sheet_to_json<any>(ws, { defval: null });
     const rows: Row[] = json
       .map((r) => {
-        const barcode = String(pick(r, ["barcode", "Barcode"]) ?? "").trim();
+        const barcode = normalizeBarcode(String(pick(r, ["barcode", "Barcode"]) ?? ""));
         if (!barcode) return null;
         return {
           barcode,
@@ -76,21 +77,27 @@ export default function ImportPage() {
   const runImport = async () => {
     if (!preview.length) return;
     setImporting(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setImporting(false);
+      return toast.error("Please sign in");
+    }
     // Upsert in chunks
     const chunks: Row[][] = [];
     for (let i = 0; i < preview.length; i += 200) chunks.push(preview.slice(i, i + 200));
     let inserted = 0;
     let updated = 0;
     for (const chunk of chunks) {
-      // Find which exist
+      // Find which exist for THIS user
       const { data: existing } = await supabase
         .from("products")
         .select("barcode")
         .in("barcode", chunk.map((r) => r.barcode));
       const existingSet = new Set((existing ?? []).map((e: any) => e.barcode));
+      const payload = chunk.map((r) => ({ ...r, user_id: user.id }));
       const { error } = await supabase
         .from("products")
-        .upsert(chunk, { onConflict: "barcode" });
+        .upsert(payload, { onConflict: "user_id,barcode" });
       if (error) {
         toast.error(error.message);
         setImporting(false);

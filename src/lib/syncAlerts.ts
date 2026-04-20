@@ -3,19 +3,17 @@ import { Product } from "@/lib/types";
 import { shouldAlert } from "@/lib/expiry";
 
 /**
- * Sync alerts table with current product expiry data.
- * - Creates a new alert when an expiry crosses into warning/expired and no active alert exists
- *   for that (product, batch, expiry_date).
- * - Updates last_shown_at daily for active alerts (re-pop daily).
- * - If an existing alert was dismissed but the same expiry is still bad, leave dismissed alone
- *   for that exact date (user already cleared it).
+ * Sync alerts table with current product expiry data for the current user.
  */
 export async function syncAlerts() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
   const { data: products, error: pErr } = await supabase.from("products").select("*");
   if (pErr || !products) return;
 
   const { data: existingAlerts } = await supabase.from("alerts").select("*");
-  const existing = new Map<string, typeof existingAlerts extends (infer U)[] | null ? U : never>();
+  const existing = new Map<string, any>();
   (existingAlerts ?? []).forEach((a: any) => {
     existing.set(`${a.product_id}|${a.batch_index}|${a.expiry_date}`, a);
   });
@@ -45,9 +43,9 @@ export async function syncAlerts() {
           severity: sev,
           first_shown_at: now,
           last_shown_at: now,
+          user_id: user.id,
         });
       } else if (!found.dismissed_at) {
-        // Re-pop daily: bump last_shown_at if it's a new day
         if ((found.last_shown_at ?? "").slice(0, 10) !== today) {
           updates.push({ id: found.id, last_shown_at: now });
         }
