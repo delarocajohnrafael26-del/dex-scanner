@@ -25,6 +25,7 @@ export type Database = {
           last_shown_at: string
           product_id: string
           severity: string
+          user_id: string
         }
         Insert: {
           batch_index: number
@@ -36,6 +37,7 @@ export type Database = {
           last_shown_at?: string
           product_id: string
           severity: string
+          user_id: string
         }
         Update: {
           batch_index?: number
@@ -47,6 +49,7 @@ export type Database = {
           last_shown_at?: string
           product_id?: string
           severity?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -69,6 +72,7 @@ export type Database = {
           id: string
           name: string
           updated_at: string
+          user_id: string
         }
         Insert: {
           barcode: string
@@ -80,6 +84,7 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string
+          user_id: string
         }
         Update: {
           barcode?: string
@@ -91,6 +96,7 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
