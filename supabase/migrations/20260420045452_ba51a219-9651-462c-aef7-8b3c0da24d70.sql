@@ -1,0 +1,1 @@
+SELECT barcode, length(barcode) AS len, name FROM public.products WHERE name ILIKE '%Alaska%' ORDER BY updated_at DESC LIMIT 10;
