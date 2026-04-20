@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Product, Alert } from "@/lib/types";
+import { Product } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar as CalIcon, List, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar as CalIcon, List, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   addMonths,
   endOfMonth,
@@ -17,8 +17,19 @@ import {
   startOfWeek,
 } from "date-fns";
 import { cn } from "@/lib/utils";
-import { severityColor, severityFor, daysLeft } from "@/lib/expiry";
+import { severityColor, severityFor, daysLeft, shouldAlert } from "@/lib/expiry";
 import { syncAlerts } from "@/lib/syncAlerts";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 type ExpiryItem = {
   product: Product;
@@ -26,18 +37,43 @@ type ExpiryItem = {
   date: string;
 };
 
+function playAlertSound() {
+  try {
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    o.frequency.setValueAtTime(660, ctx.currentTime + 0.18);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.5);
+  } catch {}
+}
+
 export default function CalendarPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [view, setView] = useState<"month" | "agenda">("month");
   const [cursor, setCursor] = useState(new Date());
   const [selected, setSelected] = useState<Date | null>(null);
+  const [pending, setPending] = useState<ExpiryItem | null>(null);
+  const playedRef = useRef(false);
+
+  const loadProducts = async () => {
+    const { data } = await supabase.from("products").select("*");
+    setProducts((data ?? []) as Product[]);
+  };
 
   useEffect(() => {
-    syncAlerts();
-    supabase
-      .from("products")
-      .select("*")
-      .then(({ data }) => setProducts((data ?? []) as Product[]));
+    (async () => {
+      await syncAlerts();
+      await loadProducts();
+    })();
   }, []);
 
   const items: ExpiryItem[] = useMemo(() => {
@@ -50,6 +86,15 @@ export default function CalendarPage() {
     }
     return r.sort((a, b) => a.date.localeCompare(b.date));
   }, [products]);
+
+  // Play alert sound once when entering page if there are warning/expired items
+  useEffect(() => {
+    if (playedRef.current || items.length === 0) return;
+    if (items.some((it) => shouldAlert(it.date))) {
+      playAlertSound();
+      playedRef.current = true;
+    }
+  }, [items]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, ExpiryItem[]>();
@@ -72,6 +117,28 @@ export default function CalendarPage() {
   const selectedItems = selected
     ? byDate.get(format(selected, "yyyy-MM-dd")) ?? []
     : [];
+
+  const confirmDismiss = async () => {
+    if (!pending) return;
+    const it = pending;
+    setPending(null);
+    const key = (`expiry_${it.batch}` as const) as "expiry_1" | "expiry_2" | "expiry_3";
+    // Clear the expiry date on the product (dismisses from calendar + alerts)
+    const { error } = await supabase
+      .from("products")
+      .update({ [key]: null })
+      .eq("id", it.product.id);
+    if (error) return toast.error(error.message);
+    // Also dismiss any matching alert row
+    await supabase
+      .from("alerts")
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq("product_id", it.product.id)
+      .eq("batch_index", it.batch)
+      .eq("expiry_date", it.date);
+    toast.success("Alert dismissed");
+    await loadProducts();
+  };
 
   return (
     <div className="space-y-4">
@@ -166,7 +233,13 @@ export default function CalendarPage() {
               {selectedItems.length === 0 ? (
                 <p className="px-1 text-xs text-muted-foreground">No expirations on this day.</p>
               ) : (
-                selectedItems.map((it) => <ItemRow key={`${it.product.id}-${it.batch}`} item={it} />)
+                selectedItems.map((it) => (
+                  <ItemRow
+                    key={`${it.product.id}-${it.batch}`}
+                    item={it}
+                    onDismiss={() => setPending(it)}
+                  />
+                ))
               )}
             </div>
           )}
@@ -187,7 +260,13 @@ export default function CalendarPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                {list.map((it) => <ItemRow key={`${it.product.id}-${it.batch}`} item={it} />)}
+                {list.map((it) => (
+                  <ItemRow
+                    key={`${it.product.id}-${it.batch}`}
+                    item={it}
+                    onDismiss={() => setPending(it)}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -196,11 +275,35 @@ export default function CalendarPage() {
           )}
         </div>
       )}
+
+      <AlertDialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dismiss this alert?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pending?.product.name || pending?.product.barcode || "This batch"} ·
+              batch {pending?.batch} · expires{" "}
+              {pending && format(parseISO(pending.date), "MMM d, yyyy")}.
+              This will remove the expiry date from the product.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDismiss}>Yes, dismiss</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-const ItemRow = ({ item }: { item: ExpiryItem }) => {
+const ItemRow = ({
+  item,
+  onDismiss,
+}: {
+  item: ExpiryItem;
+  onDismiss: () => void;
+}) => {
   const sev = severityFor(item.date);
   const d = daysLeft(item.date);
   return (
@@ -214,6 +317,15 @@ const ItemRow = ({ item }: { item: ExpiryItem }) => {
       <Badge className={`${severityColor[sev]} border-0`}>
         {sev === "expired" ? `${Math.abs(d!)}d ago` : `${d}d`}
       </Badge>
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={onDismiss}
+        className="h-8 w-8 shrink-0"
+        aria-label="Dismiss"
+      >
+        <X className="h-4 w-4" />
+      </Button>
     </div>
   );
 };
