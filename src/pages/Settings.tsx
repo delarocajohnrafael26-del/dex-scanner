@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Download, Upload, Image as ImageIcon, Volume2, Trash2, Play, FileSpreadsheet, Users } from "lucide-react";
+import { Download, Upload, Image as ImageIcon, Volume2, Trash2, Play, FileSpreadsheet, Users, Music } from "lucide-react";
 import {
   ALERT_SOUND_OPTIONS,
   AlertSoundId,
@@ -13,8 +13,13 @@ import {
   setAlertSound,
   getWallpaper,
   setWallpaper,
+  getCustomSound,
+  setCustomSound,
+  getAlertVolume,
+  setAlertVolume,
 } from "@/lib/settings";
 import { playAlertSound } from "@/lib/sounds";
+import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
@@ -29,20 +34,69 @@ export default function SettingsPage() {
   const [wallpaper, setWp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [teamName, setTeamName] = useState("");
+  const [customName, setCustomName] = useState<string | null>(null);
+  const [volume, setVol] = useState(0.8);
   const fileRef = useRef<HTMLInputElement>(null);
   const restoreRef = useRef<HTMLInputElement>(null);
   const xlsxMergeRef = useRef<HTMLInputElement>(null);
+  const customSoundRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSound(getAlertSound());
     setWp(getWallpaper());
     setTeamName(localStorage.getItem("dex.teamName") ?? "");
+    setCustomName(getCustomSound().name);
+    setVol(getAlertVolume());
   }, []);
 
   const onSoundChange = (v: AlertSoundId) => {
     setSound(v);
     setAlertSound(v);
+    if (v === "custom" && !getCustomSound().dataUrl) {
+      toast.message("Upload a sound file below to use as your custom alert");
+      return;
+    }
     playAlertSound(v);
+  };
+
+  const onVolumeChange = (vals: number[]) => {
+    const v = vals[0] ?? 0.8;
+    setVol(v);
+    setAlertVolume(v);
+  };
+
+  const onCustomSoundPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("audio/")) {
+      toast.error("Please pick an audio file (mp3, wav, m4a, ogg…)");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Sound file too large (max 2MB)");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result);
+      setCustomSound(url, file.name);
+      setCustomName(file.name);
+      setSound("custom");
+      setAlertSound("custom");
+      toast.success(`Custom sound set: ${file.name}`);
+      playAlertSound("custom");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearCustomSound = () => {
+    setCustomSound(null, null);
+    setCustomName(null);
+    if (sound === "custom") {
+      setSound("chime");
+      setAlertSound("chime");
+    }
+    toast.success("Custom sound cleared");
   };
 
   const onWallpaperPick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -290,6 +344,57 @@ export default function SettingsPage() {
           </Select>
           <Button variant="outline" onClick={() => playAlertSound(sound)} disabled={sound === "off"}>
             <Play className="mr-1 h-3.5 w-3.5" /> Test
+          </Button>
+        </div>
+
+        {/* Volume */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Volume</Label>
+            <span className="text-xs text-muted-foreground">{Math.round(volume * 100)}%</span>
+          </div>
+          <Slider
+            value={[volume]}
+            min={0}
+            max={1}
+            step={0.05}
+            onValueChange={onVolumeChange}
+          />
+        </div>
+
+        {/* Custom sound upload */}
+        <div className="space-y-2 border-t border-border pt-3">
+          <div className="flex items-center gap-2">
+            <Music className="h-3.5 w-3.5 text-primary" />
+            <Label className="text-xs">Custom sound file</Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Upload your own .mp3, .wav, .m4a or .ogg (max 2MB). Selected automatically when added.
+          </p>
+          {customName ? (
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <span className="truncate text-xs">{customName}</span>
+              <Button size="sm" variant="ghost" onClick={clearCustomSound}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs italic text-muted-foreground">No custom sound uploaded</p>
+          )}
+          <input
+            ref={customSoundRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={onCustomSoundPick}
+          />
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => customSoundRef.current?.click()}
+          >
+            <Upload className="mr-1 h-3.5 w-3.5" />
+            {customName ? "Replace custom sound" : "Upload custom sound"}
           </Button>
         </div>
       </Card>
