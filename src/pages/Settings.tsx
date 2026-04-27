@@ -34,20 +34,69 @@ export default function SettingsPage() {
   const [wallpaper, setWp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [teamName, setTeamName] = useState("");
+  const [customName, setCustomName] = useState<string | null>(null);
+  const [volume, setVol] = useState(0.8);
   const fileRef = useRef<HTMLInputElement>(null);
   const restoreRef = useRef<HTMLInputElement>(null);
   const xlsxMergeRef = useRef<HTMLInputElement>(null);
+  const customSoundRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSound(getAlertSound());
     setWp(getWallpaper());
     setTeamName(localStorage.getItem("dex.teamName") ?? "");
+    setCustomName(getCustomSound().name);
+    setVol(getAlertVolume());
   }, []);
 
   const onSoundChange = (v: AlertSoundId) => {
     setSound(v);
     setAlertSound(v);
+    if (v === "custom" && !getCustomSound().dataUrl) {
+      toast.message("Upload a sound file below to use as your custom alert");
+      return;
+    }
     playAlertSound(v);
+  };
+
+  const onVolumeChange = (vals: number[]) => {
+    const v = vals[0] ?? 0.8;
+    setVol(v);
+    setAlertVolume(v);
+  };
+
+  const onCustomSoundPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("audio/")) {
+      toast.error("Please pick an audio file (mp3, wav, m4a, ogg…)");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Sound file too large (max 2MB)");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result);
+      setCustomSound(url, file.name);
+      setCustomName(file.name);
+      setSound("custom");
+      setAlertSound("custom");
+      toast.success(`Custom sound set: ${file.name}`);
+      playAlertSound("custom");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearCustomSound = () => {
+    setCustomSound(null, null);
+    setCustomName(null);
+    if (sound === "custom") {
+      setSound("chime");
+      setAlertSound("chime");
+    }
+    toast.success("Custom sound cleared");
   };
 
   const onWallpaperPick = (e: React.ChangeEvent<HTMLInputElement>) => {
