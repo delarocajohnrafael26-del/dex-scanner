@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { ScanLine, Package, Calendar, Bell, Upload } from "lucide-react";
+import { ScanLine, Package, Calendar, Bell, Upload, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -8,6 +8,7 @@ const items = [
   { to: "/calendar", icon: Calendar, label: "Calendar" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/import", icon: Upload, label: "Import" },
+  { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export const BottomNav = ({ alertCount = 0 }: { alertCount?: number }) => {
