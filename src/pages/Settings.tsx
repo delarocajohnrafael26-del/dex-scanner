@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Download, Upload, Image as ImageIcon, Volume2, Trash2, Play, FileSpreadsheet, Users } from "lucide-react";
+import { Download, Upload, Image as ImageIcon, Volume2, Trash2, Play, FileSpreadsheet, Users, Music } from "lucide-react";
 import {
   ALERT_SOUND_OPTIONS,
   AlertSoundId,
@@ -13,8 +13,13 @@ import {
   setAlertSound,
   getWallpaper,
   setWallpaper,
+  getCustomSound,
+  setCustomSound,
+  getAlertVolume,
+  setAlertVolume,
 } from "@/lib/settings";
 import { playAlertSound } from "@/lib/sounds";
+import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
