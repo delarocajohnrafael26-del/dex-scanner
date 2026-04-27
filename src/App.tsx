@@ -9,6 +9,7 @@ import Products from "./pages/Products";
 import CalendarPage from "./pages/CalendarPage";
 import Alerts from "./pages/Alerts";
 import ImportPage from "./pages/ImportPage";
+import SettingsPage from "./pages/Settings";
 import AuthPage from "./pages/Auth";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/import" element={<ImportPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
