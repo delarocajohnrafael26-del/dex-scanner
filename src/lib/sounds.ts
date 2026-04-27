@@ -1,8 +1,8 @@
-import { AlertSoundId, getAlertSound } from "./settings";
+import { AlertSoundId, getAlertSound, getCustomSound, getAlertVolume } from "./settings";
 
 type Note = { freq: number; start: number; dur: number; type?: OscillatorType; gain?: number };
 
-const PATTERNS: Record<Exclude<AlertSoundId, "off">, Note[]> = {
+const PATTERNS: Record<Exclude<AlertSoundId, "off" | "custom">, Note[]> = {
   chime: [
     { freq: 880, start: 0, dur: 0.18 },
     { freq: 660, start: 0.18, dur: 0.3 },
@@ -28,9 +28,28 @@ const PATTERNS: Record<Exclude<AlertSoundId, "off">, Note[]> = {
   ],
 };
 
-export function playAlertSound(idOverride?: AlertSoundId) {
-  const id = idOverride ?? getAlertSound();
-  if (id === "off") return;
+let customAudio: HTMLAudioElement | null = null;
+
+function playCustom(volume: number) {
+  const { dataUrl } = getCustomSound();
+  if (!dataUrl) {
+    // Fallback to default chime if no custom file uploaded
+    playPattern("chime", volume);
+    return;
+  }
+  try {
+    if (!customAudio || customAudio.src !== dataUrl) {
+      customAudio = new Audio(dataUrl);
+    }
+    customAudio.currentTime = 0;
+    customAudio.volume = volume;
+    void customAudio.play();
+  } catch {
+    /* noop */
+  }
+}
+
+function playPattern(id: Exclude<AlertSoundId, "off" | "custom">, volume: number) {
   try {
     const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!Ctx) return;
@@ -43,9 +62,9 @@ export function playAlertSound(idOverride?: AlertSoundId) {
       const g = ctx.createGain();
       o.type = n.type ?? "sine";
       o.frequency.setValueAtTime(n.freq, t0 + n.start);
-      const peak = n.gain ?? 0.25;
+      const peak = (n.gain ?? 0.25) * volume;
       g.gain.setValueAtTime(0.0001, t0 + n.start);
-      g.gain.exponentialRampToValueAtTime(peak, t0 + n.start + 0.02);
+      g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t0 + n.start + 0.02);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + n.start + n.dur);
       o.connect(g).connect(ctx.destination);
       o.start(t0 + n.start);
@@ -56,4 +75,15 @@ export function playAlertSound(idOverride?: AlertSoundId) {
   } catch {
     /* noop */
   }
+}
+
+export function playAlertSound(idOverride?: AlertSoundId, volumeOverride?: number) {
+  const id = idOverride ?? getAlertSound();
+  if (id === "off") return;
+  const volume = volumeOverride ?? getAlertVolume();
+  if (id === "custom") {
+    playCustom(volume);
+    return;
+  }
+  playPattern(id, volume);
 }
