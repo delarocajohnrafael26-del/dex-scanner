@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { ScanLine, Package, Calendar, Bell, Upload } from "lucide-react";
+import { ScanLine, Package, Calendar, Bell, Upload, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -8,13 +8,14 @@ const items = [
   { to: "/calendar", icon: Calendar, label: "Calendar" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/import", icon: Upload, label: "Import" },
+  { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export const BottomNav = ({ alertCount = 0 }: { alertCount?: number }) => {
   const { pathname } = useLocation();
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur-lg">
-      <div className="mx-auto grid max-w-2xl grid-cols-5">
+      <div className="mx-auto grid max-w-2xl grid-cols-6">
         {items.map(({ to, icon: Icon, label }) => {
           const active = pathname === to || (to !== "/" && pathname.startsWith(to));
           const showBadge = label === "Alerts" && alertCount > 0;

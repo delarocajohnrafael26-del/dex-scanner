@@ -9,6 +9,7 @@ import { format, parseISO } from "date-fns";
 import { syncAlerts } from "@/lib/syncAlerts";
 import { toast } from "sonner";
 import { daysLeft, severityColor } from "@/lib/expiry";
+import { playAlertSound } from "@/lib/sounds";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,29 +22,6 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type Joined = Alert & { product: Product | null };
-
-// Short beep using WebAudio — no asset needed
-function playAlertSound() {
-  try {
-    const Ctx =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = "sine";
-    o.frequency.setValueAtTime(880, ctx.currentTime);
-    o.frequency.setValueAtTime(660, ctx.currentTime + 0.18);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-    o.connect(g).connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + 0.5);
-  } catch {
-    /* noop */
-  }
-}
 
 export default function Alerts() {
   const [alerts, setAlerts] = useState<Joined[]>([]);
