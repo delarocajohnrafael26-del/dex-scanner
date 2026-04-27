@@ -346,6 +346,57 @@ export default function SettingsPage() {
             <Play className="mr-1 h-3.5 w-3.5" /> Test
           </Button>
         </div>
+
+        {/* Volume */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Volume</Label>
+            <span className="text-xs text-muted-foreground">{Math.round(volume * 100)}%</span>
+          </div>
+          <Slider
+            value={[volume]}
+            min={0}
+            max={1}
+            step={0.05}
+            onValueChange={onVolumeChange}
+          />
+        </div>
+
+        {/* Custom sound upload */}
+        <div className="space-y-2 border-t border-border pt-3">
+          <div className="flex items-center gap-2">
+            <Music className="h-3.5 w-3.5 text-primary" />
+            <Label className="text-xs">Custom sound file</Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Upload your own .mp3, .wav, .m4a or .ogg (max 2MB). Selected automatically when added.
+          </p>
+          {customName ? (
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <span className="truncate text-xs">{customName}</span>
+              <Button size="sm" variant="ghost" onClick={clearCustomSound}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs italic text-muted-foreground">No custom sound uploaded</p>
+          )}
+          <input
+            ref={customSoundRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={onCustomSoundPick}
+          />
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => customSoundRef.current?.click()}
+          >
+            <Upload className="mr-1 h-3.5 w-3.5" />
+            {customName ? "Replace custom sound" : "Upload custom sound"}
+          </Button>
+        </div>
       </Card>
 
       {/* Wallpaper */}
