@@ -332,6 +332,50 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {/* Team Excel — export & merge */}
+      <Card className="space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          <p className="font-display font-semibold">Team Excel (.xlsx)</p>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Export your work as an Excel file each teammate can share. Then merge multiple teammates'
+          files into one combined list (newest entry per barcode wins).
+        </p>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="teamName" className="text-xs">Your name / team member</Label>
+          <Input
+            id="teamName"
+            placeholder="e.g. Alex"
+            value={teamName}
+            onChange={(e) => saveTeamName(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button className="flex-1" onClick={exportTeamXlsx} disabled={busy}>
+            <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download my work (.xlsx)
+          </Button>
+          <input
+            ref={xlsxMergeRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            multiple
+            className="hidden"
+            onChange={mergeTeamXlsx}
+          />
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => xlsxMergeRef.current?.click()}
+            disabled={busy}
+          >
+            <Upload className="mr-1 h-3.5 w-3.5" /> Merge teammates' files
+          </Button>
+        </div>
+      </Card>
+
       {/* Backup & Restore */}
       <Card className="space-y-3 p-4">
         <div className="flex items-center gap-2">
