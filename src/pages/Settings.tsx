@@ -36,6 +36,7 @@ export default function SettingsPage() {
   useEffect(() => {
     setSound(getAlertSound());
     setWp(getWallpaper());
+    setTeamName(localStorage.getItem("dex.teamName") ?? "");
   }, []);
 
   const onSoundChange = (v: AlertSoundId) => {
