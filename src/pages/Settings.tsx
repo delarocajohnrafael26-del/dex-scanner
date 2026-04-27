@@ -28,8 +28,10 @@ export default function SettingsPage() {
   const [sound, setSound] = useState<AlertSoundId>("chime");
   const [wallpaper, setWp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [teamName, setTeamName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const restoreRef = useRef<HTMLInputElement>(null);
+  const xlsxMergeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSound(getAlertSound());
