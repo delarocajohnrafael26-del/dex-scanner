@@ -14,20 +14,49 @@ export function useActiveAlertCount() {
   useEffect(() => {
     let active = true;
     const load = async () => {
+      // Pull active alerts joined with their product so we can verify the
+      // underlying expiry date is still set. If the user dismissed it (which
+      // nulls expiry_N), we must NOT count it — even if the alert row hasn't
+      // been marked dismissed yet (e.g. race / older rows).
       const { data } = await supabase
         .from("alerts")
-        .select("id")
+        .select("id, batch_index, expiry_date, product:products(expiry_1, expiry_2, expiry_3)")
         .is("dismissed_at", null);
-      if (active) setCount((data ?? []).length);
+
+      const valid = (data ?? []).filter((a: any) => {
+        const p = a.product;
+        if (!p) return false;
+        const key = `expiry_${a.batch_index}` as "expiry_1" | "expiry_2" | "expiry_3";
+        return p[key] === a.expiry_date;
+      });
+
+      // Auto-clean stale alert rows whose expiry was already removed.
+      const stale = (data ?? []).filter((a: any) => !valid.includes(a));
+      if (stale.length) {
+        await supabase
+          .from("alerts")
+          .update({ dismissed_at: new Date().toISOString() })
+          .in("id", stale.map((s: any) => s.id));
+      }
+
+      if (active) setCount(valid.length);
     };
     load();
+
     const channel = supabase
       .channel(idRef.current)
       .on("postgres_changes", { event: "*", schema: "public", table: "alerts" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "products" }, load)
       .subscribe();
+
+    // Also refresh when window regains focus (covers cross-tab dismissals)
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+
     return () => {
       active = false;
       supabase.removeChannel(channel);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
