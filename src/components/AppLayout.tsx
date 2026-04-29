@@ -8,6 +8,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { getWallpaper } from "@/lib/settings";
+import { syncAlerts } from "@/lib/syncAlerts";
+import { ensureNotificationPermission, scheduleExpiryNotifications } from "@/lib/notifications";
 
 export const AppLayout = () => {
   const { user, loading } = useAuth();
@@ -20,6 +22,37 @@ export const AppLayout = () => {
     window.addEventListener("wallpaper-changed", onChange);
     return () => window.removeEventListener("wallpaper-changed", onChange);
   }, []);
+
+  // Keep alerts + device notifications in sync. Re-runs on focus/visibility
+  // so newly elapsed expirations are picked up when the user reopens the app.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        await syncAlerts();
+        if (!cancelled) await scheduleExpiryNotifications();
+      } catch (e) {
+        console.warn("alert sync failed", e);
+      }
+    };
+    ensureNotificationPermission().finally(run);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") run();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", run);
+    // Periodic refresh while app is open (every 5 min)
+    const interval = window.setInterval(run, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", run);
+      window.clearInterval(interval);
+    };
+  }, [user]);
 
   if (loading) {
     return (

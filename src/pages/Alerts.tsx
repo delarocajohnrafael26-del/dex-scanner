@@ -10,6 +10,8 @@ import { syncAlerts } from "@/lib/syncAlerts";
 import { toast } from "sonner";
 import { daysLeft, severityColor } from "@/lib/expiry";
 import { playAlertSound } from "@/lib/sounds";
+import { dismissExpiry } from "@/lib/dismissExpiry";
+import { scheduleExpiryNotifications } from "@/lib/notifications";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,14 +62,21 @@ export default function Alerts() {
     if (!pending) return;
     const a = pending;
     setPending(null);
-    const { error } = await supabase
-      .from("alerts")
-      .update({ dismissed_at: new Date().toISOString() })
-      .eq("id", a.id);
-    if (error) return toast.error(error.message);
-    toast.success("Alert cleared");
+    try {
+      await dismissExpiry({
+        productId: a.product_id,
+        batch: a.batch_index,
+        expiryDate: a.expiry_date,
+        alertId: a.id,
+      });
+    } catch (e: any) {
+      return toast.error(e.message ?? "Failed to dismiss");
+    }
+    toast.success("Alert cleared & expiry date removed");
     setAlerts((arr) => arr.filter((x) => x.id !== a.id));
     prevCountRef.current = Math.max(0, (prevCountRef.current ?? 1) - 1);
+    // Refresh device notifications to reflect the cleared expiry
+    scheduleExpiryNotifications().catch(() => {});
   };
 
   const refresh = async () => {
