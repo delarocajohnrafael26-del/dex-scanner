@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { playAlertSound } from "@/lib/sounds";
+import { dismissExpiry } from "@/lib/dismissExpiry";
+import { scheduleExpiryNotifications } from "@/lib/notifications";
 
 type ExpiryItem = {
   product: Product;
@@ -104,23 +106,18 @@ export default function CalendarPage() {
     if (!pending) return;
     const it = pending;
     setPending(null);
-    const key = (`expiry_${it.batch}` as const) as "expiry_1" | "expiry_2" | "expiry_3";
-    // Clear the expiry date on the product (dismisses from calendar + alerts)
-    const patch: Record<string, null> = { [key]: null };
-    const { error } = await supabase
-      .from("products")
-      .update(patch as any)
-      .eq("id", it.product.id);
-    if (error) return toast.error(error.message);
-    // Also dismiss any matching alert row
-    await supabase
-      .from("alerts")
-      .update({ dismissed_at: new Date().toISOString() })
-      .eq("product_id", it.product.id)
-      .eq("batch_index", it.batch)
-      .eq("expiry_date", it.date);
-    toast.success("Alert dismissed");
+    try {
+      await dismissExpiry({
+        productId: it.product.id,
+        batch: it.batch,
+        expiryDate: it.date,
+      });
+    } catch (e: any) {
+      return toast.error(e.message ?? "Failed to dismiss");
+    }
+    toast.success("Alert dismissed & expiry date removed");
     await loadProducts();
+    scheduleExpiryNotifications().catch(() => {});
   };
 
   return (
