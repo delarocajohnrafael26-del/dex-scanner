@@ -130,28 +130,49 @@ export default function SettingsPage() {
         supabase.from("alerts").select("*"),
         supabase.auth.getUser(),
       ]);
-      const backup = {
-        format: "dex-scanner-backup",
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        user: userRes.user?.email ?? null,
-        settings: {
-          alertSound: getAlertSound(),
-          wallpaper: getWallpaper(),
-        },
-        products: products ?? [],
-        alerts: alerts ?? [],
-      };
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `dex-scanner-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success(`Backup saved · ${products?.length ?? 0} products`);
+
+      const wb = XLSX.utils.book_new();
+
+      // Meta sheet (used to identify file on restore)
+      const metaRows = [
+        { key: "format", value: "dex-scanner-backup" },
+        { key: "version", value: 1 },
+        { key: "exportedAt", value: new Date().toISOString() },
+        { key: "user", value: userRes.user?.email ?? "" },
+        { key: "alertSound", value: getAlertSound() },
+      ];
+      const wsMeta = XLSX.utils.json_to_sheet(metaRows, { header: ["key", "value"] });
+      wsMeta["!cols"] = [{ wch: 16 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, wsMeta, "Meta");
+
+      // Products sheet
+      const productRows = (products ?? []).map((p: any) => ({
+        barcode: p.barcode,
+        name: p.name ?? "",
+        category: p.category ?? "",
+        expiry_1: p.expiry_1 ?? "",
+        expiry_2: p.expiry_2 ?? "",
+        expiry_3: p.expiry_3 ?? "",
+      }));
+      const wsProducts = XLSX.utils.json_to_sheet(productRows, {
+        header: ["barcode", "name", "category", "expiry_1", "expiry_2", "expiry_3"],
+      });
+      wsProducts["!cols"] = [
+        { wch: 16 }, { wch: 32 }, { wch: 14 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsProducts, "Products");
+
+      // Alerts sheet
+      const alertRows = (alerts ?? []).map((a: any) => ({ ...a }));
+      if (alertRows.length > 0) {
+        const wsAlerts = XLSX.utils.json_to_sheet(alertRows);
+        XLSX.utils.book_append_sheet(wb, wsAlerts, "Alerts");
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `dex-scanner-backup-${date}.xlsx`);
+      toast.success(`Backup saved · ${productRows.length} products`);
     } catch (e: any) {
       toast.error(e.message ?? "Backup failed");
     } finally {
@@ -164,33 +185,43 @@ export default function SettingsPage() {
     if (!file) return;
     setBusy(true);
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (data.format !== "dex-scanner-backup") throw new Error("Not a Dex Scanner backup file");
       const { data: userRes } = await supabase.auth.getUser();
       const uid = userRes.user?.id;
       if (!uid) throw new Error("Not signed in");
 
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+
+      // Validate via Meta sheet
+      const metaSheet = wb.Sheets["Meta"];
+      if (!metaSheet) throw new Error("Not a Dex Scanner backup file (missing Meta sheet)");
+      const metaRows: any[] = XLSX.utils.sheet_to_json(metaSheet, { defval: "" });
+      const meta: Record<string, any> = {};
+      for (const r of metaRows) meta[String(r.key)] = r.value;
+      if (meta.format !== "dex-scanner-backup") throw new Error("Not a Dex Scanner backup file");
+
       // Restore settings
-      if (data.settings?.alertSound) {
-        setAlertSound(data.settings.alertSound);
-        setSound(data.settings.alertSound);
-      }
-      if (data.settings?.wallpaper) {
-        setWallpaper(data.settings.wallpaper);
-        setWp(data.settings.wallpaper);
+      if (meta.alertSound) {
+        setAlertSound(meta.alertSound);
+        setSound(meta.alertSound);
       }
 
-      // Restore products (rewrite user_id, drop ids)
-      const products = (data.products ?? []).map((p: any) => ({
-        user_id: uid,
-        barcode: p.barcode,
-        name: p.name ?? "",
-        category: p.category ?? "",
-        expiry_1: p.expiry_1 ?? null,
-        expiry_2: p.expiry_2 ?? null,
-        expiry_3: p.expiry_3 ?? null,
-      }));
+      // Restore products
+      const productsSheet = wb.Sheets["Products"];
+      const rawProducts: any[] = productsSheet
+        ? XLSX.utils.sheet_to_json(productsSheet, { defval: "" })
+        : [];
+      const products = rawProducts
+        .filter((p) => String(p.barcode ?? "").trim() !== "")
+        .map((p: any) => ({
+          user_id: uid,
+          barcode: String(p.barcode).trim(),
+          name: p.name ?? "",
+          category: p.category ?? "",
+          expiry_1: p.expiry_1 || null,
+          expiry_2: p.expiry_2 || null,
+          expiry_3: p.expiry_3 || null,
+        }));
       let imported = 0;
       // Upsert in chunks of 500
       for (let i = 0; i < products.length; i += 500) {
