@@ -561,7 +561,7 @@ export default function SettingsPage() {
       <Card className="space-y-3 p-4">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
-          <p className="font-display font-semibold">Team Excel (.xlsx)</p>
+          <p className="font-display font-semibold">Team Excel (.xls)</p>
         </div>
         <p className="text-xs text-muted-foreground">
           Export your work as an Excel file each teammate can share. Then merge multiple teammates'
@@ -580,12 +580,12 @@ export default function SettingsPage() {
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button className="flex-1" onClick={exportTeamXlsx} disabled={busy}>
-            <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download my work (.xlsx)
+            <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download my work (.xls)
           </Button>
           <input
             ref={xlsxMergeRef}
             type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             multiple
             className="hidden"
             onChange={mergeTeamXlsx}
@@ -608,12 +608,12 @@ export default function SettingsPage() {
           <p className="font-display font-semibold">Backup & Restore</p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Export all your products & settings to an Excel file (.xlsx). Move it to another phone,
+          Export all your products & settings to an Excel file (.xls). Move it to another phone,
           then sign in and restore.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button className="flex-1" onClick={downloadBackup} disabled={busy}>
-            <Download className="mr-1 h-3.5 w-3.5" /> Download backup (.xlsx)
+            <Download className="mr-1 h-3.5 w-3.5" /> Download backup (.xls)
           </Button>
           <input
             ref={restoreRef}
