@@ -577,7 +577,7 @@ export default function SettingsPage() {
           <input
             ref={restoreRef}
             type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".xlsx,.xls,.csv,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json,text/csv"
             className="hidden"
             onChange={restoreBackup}
           />
