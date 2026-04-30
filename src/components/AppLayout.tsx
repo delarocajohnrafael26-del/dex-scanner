@@ -79,7 +79,7 @@ export const AppLayout = () => {
 
   return (
     <div className="min-h-screen bg-background" style={wallpaperStyle}>
-      <div className="mx-auto max-w-2xl px-4 pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+      <div className="mx-auto max-w-2xl px-4 pt-5 pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
           <span className="truncate">{user.email}</span>
           <Button size="sm" variant="ghost" onClick={signOut} className="h-7 px-2">
