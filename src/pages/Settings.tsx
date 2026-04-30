@@ -122,6 +122,49 @@ export default function SettingsPage() {
     toast.success("Wallpaper cleared");
   };
 
+  const saveWorkbook = (wb: XLSX.WorkBook, filename: string, bookType: "xlsx" | "xls") => {
+    const data = XLSX.write(wb, { bookType, type: "array", compression: false });
+    const mime = bookType === "xls"
+      ? "application/vnd.ms-excel"
+      : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const blob = new Blob([data], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const readWorkbookFile = async (file: File, options: XLSX.ParsingOptions = {}) => {
+    if (file.name.toLowerCase().endsWith(".csv")) {
+      return XLSX.read(await file.text(), { ...options, type: "string" });
+    }
+
+    const buf = await file.arrayBuffer();
+    try {
+      return XLSX.read(new Uint8Array(buf), { ...options, type: "array" });
+    } catch (err: any) {
+      const message = String(err?.message ?? "");
+      try {
+        const text = await file.text();
+        const trimmed = text.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[") || trimmed.includes(",")) {
+          return XLSX.read(text, { ...options, type: "string" });
+        }
+      } catch {
+        // Ignore text fallback failures and show the clearer Excel error below.
+      }
+      if (/bad compressed size|corrupt|zip/i.test(message)) {
+        throw new Error("This Excel backup is damaged. Download a new backup with the updated app, then restore that file.");
+      }
+      throw err;
+    }
+  };
+
   const downloadBackup = async () => {
     setBusy(true);
     try {
@@ -171,7 +214,7 @@ export default function SettingsPage() {
       }
 
       const date = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, `dex-scanner-backup-${date}.xlsx`);
+      saveWorkbook(wb, `dex-scanner-backup-${date}.xls`, "xls");
       toast.success(`Backup saved · ${productRows.length} products`);
     } catch (e: any) {
       toast.error(e.message ?? "Backup failed");
@@ -228,8 +271,7 @@ export default function SettingsPage() {
         }
       } else {
         // Excel: .xlsx / .xls / .csv all handled by XLSX.read
-        const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: "array", cellDates: true });
+        const wb = await readWorkbookFile(file, { cellDates: true });
 
         // Optional Meta sheet
         const metaSheet = wb.Sheets["Meta"];
@@ -322,7 +364,7 @@ export default function SettingsPage() {
       XLSX.utils.book_append_sheet(wb, ws, "Products");
       const date = new Date().toISOString().slice(0, 10);
       const safe = member.replace(/[^a-z0-9_-]+/gi, "_");
-      XLSX.writeFile(wb, `dex-team-${safe}-${date}.xlsx`);
+      saveWorkbook(wb, `dex-team-${safe}-${date}.xls`, "xls");
       toast.success(`Exported ${rows.length} products`);
     } catch (e: any) {
       toast.error(e.message ?? "Export failed");
@@ -344,8 +386,7 @@ export default function SettingsPage() {
       const memberCounts: Record<string, number> = {};
 
       for (const f of files) {
-        const buf = await f.arrayBuffer();
-        const wb = XLSX.read(buf, { type: "array" });
+        const wb = await readWorkbookFile(f);
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
         for (const r of rows) {
@@ -520,7 +561,7 @@ export default function SettingsPage() {
       <Card className="space-y-3 p-4">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
-          <p className="font-display font-semibold">Team Excel (.xlsx)</p>
+          <p className="font-display font-semibold">Team Excel (.xls)</p>
         </div>
         <p className="text-xs text-muted-foreground">
           Export your work as an Excel file each teammate can share. Then merge multiple teammates'
@@ -539,12 +580,12 @@ export default function SettingsPage() {
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button className="flex-1" onClick={exportTeamXlsx} disabled={busy}>
-            <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download my work (.xlsx)
+            <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download my work (.xls)
           </Button>
           <input
             ref={xlsxMergeRef}
             type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             multiple
             className="hidden"
             onChange={mergeTeamXlsx}
@@ -567,12 +608,12 @@ export default function SettingsPage() {
           <p className="font-display font-semibold">Backup & Restore</p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Export all your products & settings to an Excel file (.xlsx). Move it to another phone,
+          Export all your products & settings to an Excel file (.xls). Move it to another phone,
           then sign in and restore.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button className="flex-1" onClick={downloadBackup} disabled={busy}>
-            <Download className="mr-1 h-3.5 w-3.5" /> Download backup (.xlsx)
+            <Download className="mr-1 h-3.5 w-3.5" /> Download backup (.xls)
           </Button>
           <input
             ref={restoreRef}
