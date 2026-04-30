@@ -14,7 +14,7 @@ const items = [
 export const BottomNav = ({ alertCount = 0 }: { alertCount?: number }) => {
   const { pathname } = useLocation();
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur-lg">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto grid max-w-2xl grid-cols-6">
         {items.map(({ to, icon: Icon, label }) => {
           const active = pathname === to || (to !== "/" && pathname.startsWith(to));
