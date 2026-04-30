@@ -271,8 +271,7 @@ export default function SettingsPage() {
         }
       } else {
         // Excel: .xlsx / .xls / .csv all handled by XLSX.read
-        const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: "array", cellDates: true });
+        const wb = await readWorkbookFile(file, { cellDates: true });
 
         // Optional Meta sheet
         const metaSheet = wb.Sheets["Meta"];
@@ -365,7 +364,7 @@ export default function SettingsPage() {
       XLSX.utils.book_append_sheet(wb, ws, "Products");
       const date = new Date().toISOString().slice(0, 10);
       const safe = member.replace(/[^a-z0-9_-]+/gi, "_");
-      XLSX.writeFile(wb, `dex-team-${safe}-${date}.xlsx`);
+      saveWorkbook(wb, `dex-team-${safe}-${date}.xls`, "xls");
       toast.success(`Exported ${rows.length} products`);
     } catch (e: any) {
       toast.error(e.message ?? "Export failed");
@@ -387,8 +386,7 @@ export default function SettingsPage() {
       const memberCounts: Record<string, number> = {};
 
       for (const f of files) {
-        const buf = await f.arrayBuffer();
-        const wb = XLSX.read(buf, { type: "array" });
+        const wb = await readWorkbookFile(f);
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
         for (const r of rows) {
