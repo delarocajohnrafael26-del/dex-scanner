@@ -519,17 +519,17 @@ export default function SettingsPage() {
           <p className="font-display font-semibold">Backup & Restore</p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Export all your products & settings to a file. Move it to another phone, then sign in
-          and restore.
+          Export all your products & settings to an Excel file (.xlsx). Move it to another phone,
+          then sign in and restore.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button className="flex-1" onClick={downloadBackup} disabled={busy}>
-            <Download className="mr-1 h-3.5 w-3.5" /> Download backup
+            <Download className="mr-1 h-3.5 w-3.5" /> Download backup (.xlsx)
           </Button>
           <input
             ref={restoreRef}
             type="file"
-            accept="application/json,.json"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="hidden"
             onChange={restoreBackup}
           />
