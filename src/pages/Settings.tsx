@@ -122,6 +122,49 @@ export default function SettingsPage() {
     toast.success("Wallpaper cleared");
   };
 
+  const saveWorkbook = (wb: XLSX.WorkBook, filename: string, bookType: "xlsx" | "xls") => {
+    const data = XLSX.write(wb, { bookType, type: "array", compression: false });
+    const mime = bookType === "xls"
+      ? "application/vnd.ms-excel"
+      : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const blob = new Blob([data], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const readWorkbookFile = async (file: File, options: XLSX.ParsingOptions = {}) => {
+    if (file.name.toLowerCase().endsWith(".csv")) {
+      return XLSX.read(await file.text(), { ...options, type: "string" });
+    }
+
+    const buf = await file.arrayBuffer();
+    try {
+      return XLSX.read(new Uint8Array(buf), { ...options, type: "array" });
+    } catch (err: any) {
+      const message = String(err?.message ?? "");
+      try {
+        const text = await file.text();
+        const trimmed = text.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[") || trimmed.includes(",")) {
+          return XLSX.read(text, { ...options, type: "string" });
+        }
+      } catch {
+        // Ignore text fallback failures and show the clearer Excel error below.
+      }
+      if (/bad compressed size|corrupt|zip/i.test(message)) {
+        throw new Error("This Excel backup is damaged. Download a new backup with the updated app, then restore that file.");
+      }
+      throw err;
+    }
+  };
+
   const downloadBackup = async () => {
     setBusy(true);
     try {
@@ -171,7 +214,7 @@ export default function SettingsPage() {
       }
 
       const date = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, `dex-scanner-backup-${date}.xlsx`);
+      saveWorkbook(wb, `dex-scanner-backup-${date}.xls`, "xls");
       toast.success(`Backup saved · ${productRows.length} products`);
     } catch (e: any) {
       toast.error(e.message ?? "Backup failed");
