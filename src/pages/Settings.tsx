@@ -180,6 +180,29 @@ export default function SettingsPage() {
     }
   };
 
+  const normalizeDate = (v: any): string | null => {
+    if (v === null || v === undefined || v === "") return null;
+    // Excel date serial number
+    if (typeof v === "number" && isFinite(v)) {
+      const d = XLSX.SSF.parse_date_code(v);
+      if (d) {
+        const mm = String(d.m).padStart(2, "0");
+        const dd = String(d.d).padStart(2, "0");
+        return `${d.y}-${mm}-${dd}`;
+      }
+    }
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      return v.toISOString().slice(0, 10);
+    }
+    const s = String(v).trim();
+    if (!s) return null;
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return null;
+  };
+
   const restoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -189,39 +212,64 @@ export default function SettingsPage() {
       const uid = userRes.user?.id;
       if (!uid) throw new Error("Not signed in");
 
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      const lower = file.name.toLowerCase();
+      let rawProducts: any[] = [];
+      let restoredAlertSound: string | null = null;
 
-      // Validate via Meta sheet
-      const metaSheet = wb.Sheets["Meta"];
-      if (!metaSheet) throw new Error("Not a Dex Scanner backup file (missing Meta sheet)");
-      const metaRows: any[] = XLSX.utils.sheet_to_json(metaSheet, { defval: "" });
-      const meta: Record<string, any> = {};
-      for (const r of metaRows) meta[String(r.key)] = r.value;
-      if (meta.format !== "dex-scanner-backup") throw new Error("Not a Dex Scanner backup file");
+      if (lower.endsWith(".json")) {
+        // Legacy JSON backup
+        const text = await file.text();
+        const json = JSON.parse(text);
+        if (Array.isArray(json)) {
+          rawProducts = json;
+        } else if (json && typeof json === "object") {
+          rawProducts = json.products ?? json.data?.products ?? [];
+          restoredAlertSound = json.alertSound ?? json.settings?.alertSound ?? null;
+        }
+      } else {
+        // Excel: .xlsx / .xls / .csv all handled by XLSX.read
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array", cellDates: true });
 
-      // Restore settings
-      if (meta.alertSound) {
-        setAlertSound(meta.alertSound);
-        setSound(meta.alertSound);
+        // Optional Meta sheet
+        const metaSheet = wb.Sheets["Meta"];
+        if (metaSheet) {
+          const metaRows: any[] = XLSX.utils.sheet_to_json(metaSheet, { defval: "" });
+          const meta: Record<string, any> = {};
+          for (const r of metaRows) meta[String(r.key)] = r.value;
+          if (meta.alertSound) restoredAlertSound = String(meta.alertSound);
+        }
+
+        // Use Products sheet, or fall back to first non-meta sheet
+        const productsSheet =
+          wb.Sheets["Products"] ||
+          wb.Sheets[wb.SheetNames.find((n) => n !== "Meta" && n !== "Alerts") ?? wb.SheetNames[0]];
+        if (!productsSheet) throw new Error("No products found in this file");
+        rawProducts = XLSX.utils.sheet_to_json(productsSheet, { defval: "", raw: true });
       }
 
-      // Restore products
-      const productsSheet = wb.Sheets["Products"];
-      const rawProducts: any[] = productsSheet
-        ? XLSX.utils.sheet_to_json(productsSheet, { defval: "" })
-        : [];
+      if (restoredAlertSound) {
+        setAlertSound(restoredAlertSound as AlertSoundId);
+        setSound(restoredAlertSound as AlertSoundId);
+      }
+
       const products = rawProducts
-        .filter((p) => String(p.barcode ?? "").trim() !== "")
+        .map((p: any) => ({
+          ...p,
+          barcode: String(p.barcode ?? p.Barcode ?? "").trim(),
+        }))
+        .filter((p) => p.barcode !== "")
         .map((p: any) => ({
           user_id: uid,
-          barcode: String(p.barcode).trim(),
-          name: p.name ?? "",
-          category: p.category ?? "",
-          expiry_1: p.expiry_1 || null,
-          expiry_2: p.expiry_2 || null,
-          expiry_3: p.expiry_3 || null,
+          barcode: p.barcode,
+          name: String(p.name ?? p.Name ?? ""),
+          category: String(p.category ?? p.Category ?? ""),
+          expiry_1: normalizeDate(p.expiry_1 ?? p.Expiry_1 ?? p["Expiry 1"]),
+          expiry_2: normalizeDate(p.expiry_2 ?? p.Expiry_2 ?? p["Expiry 2"]),
+          expiry_3: normalizeDate(p.expiry_3 ?? p.Expiry_3 ?? p["Expiry 3"]),
         }));
+
+      if (products.length === 0) throw new Error("No valid products with barcodes found in file");
       let imported = 0;
       // Upsert in chunks of 500
       for (let i = 0; i < products.length; i += 500) {
