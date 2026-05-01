@@ -9,8 +9,24 @@ export async function syncAlerts() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  const { data: products, error: pErr } = await supabase.from("products").select("*");
-  if (pErr || !products) return;
+  // Page through products to avoid Supabase's 1000-row default limit.
+  // Only consider products with at least one expiry set.
+  const pageSize = 1000;
+  let from = 0;
+  const products: Product[] = [];
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .or("expiry_1.not.is.null,expiry_2.not.is.null,expiry_3.not.is.null")
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error || !data) return;
+    products.push(...(data as Product[]));
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
 
   const { data: existingAlerts } = await supabase.from("alerts").select("*");
   const existing = new Map<string, any>();
