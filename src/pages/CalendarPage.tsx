@@ -49,8 +49,26 @@ export default function CalendarPage() {
   const playedRef = useRef(false);
 
   const loadProducts = async () => {
-    const { data } = await supabase.from("products").select("*");
-    setProducts((data ?? []) as Product[]);
+    // Only fetch products that have at least one expiry date set.
+    // Page in batches to bypass Supabase's 1000-row default cap so every
+    // tracked expiry shows up on the calendar/agenda.
+    const pageSize = 1000;
+    let from = 0;
+    const all: Product[] = [];
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .or("expiry_1.not.is.null,expiry_2.not.is.null,expiry_3.not.is.null")
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error || !data) break;
+      all.push(...(data as Product[]));
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    setProducts(all);
   };
 
   useEffect(() => {
