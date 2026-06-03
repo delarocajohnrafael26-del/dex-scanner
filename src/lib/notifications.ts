@@ -21,12 +21,23 @@ function notifId(productId: string, batch: number): number {
 }
 
 export async function ensureNotificationPermission(): Promise<boolean> {
-  if (!isNative()) return false;
+  if (isNative()) {
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display === "granted") return true;
+      const req = await LocalNotifications.requestPermissions();
+      return req.display === "granted";
+    } catch {
+      return false;
+    }
+  }
+  // Web / WebView APK (e.g. webintoapp): use the standard Notification API.
+  if (typeof Notification === "undefined") return false;
   try {
-    const perm = await LocalNotifications.checkPermissions();
-    if (perm.display === "granted") return true;
-    const req = await LocalNotifications.requestPermissions();
-    return req.display === "granted";
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission === "denied") return false;
+    const res = await Notification.requestPermission();
+    return res === "granted";
   } catch {
     return false;
   }
@@ -43,9 +54,11 @@ export async function ensureNotificationPermission(): Promise<boolean> {
  * - We cancel + reschedule each run so the set always matches current data.
  */
 export async function scheduleExpiryNotifications() {
-  if (!isNative()) return;
   const granted = await ensureNotificationPermission();
   if (!granted) return;
+  if (!isNative()) {
+    return scheduleWebExpiryNotifications();
+  }
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
