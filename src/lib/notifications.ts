@@ -152,3 +152,87 @@ export async function cancelExpiryNotification(productId: string, batch: number)
     /* ignore */
   }
 }
+
+/**
+ * Web/WebView scheduling. Uses a service worker to fire notifications even
+ * when the page is backgrounded. Works in webintoapp APKs as long as the OS
+ * keeps the WebView's service worker alive.
+ */
+async function scheduleWebExpiryNotifications() {
+  if (!("serviceWorker" in navigator)) return;
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  if (!reg || !reg.active) return;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { data: products } = await supabase.from("products").select("*");
+  if (!products) return;
+
+  const now = Date.now();
+  const horizon = now + 7 * 24 * 60 * 60 * 1000; // schedule up to 7 days out
+  const notifications: any[] = [];
+
+  for (const p of products as Product[]) {
+    ([1, 2, 3] as const).forEach((idx) => {
+      const date = (p as any)[`expiry_${idx}`] as string | null;
+      if (!date) return;
+      const sev = shouldAlert(date);
+      if (!sev) return;
+      const tag = `expiry-${p.id}-${idx}`;
+      const label = p.name || p.barcode || "Item";
+      const d = daysLeft(date)!;
+
+      if (sev === "expired") {
+        notifications.push({
+          tag,
+          at: now + 30_000,
+          title: `Expired: ${label}`,
+          body: `Batch ${idx} expired ${Math.abs(d)} day(s) ago.`,
+          data: { productId: p.id, batch: idx, expiry: date },
+        });
+      } else {
+        // Fire at 9:00 AM next chance.
+        const at = new Date();
+        at.setHours(9, 0, 0, 0);
+        if (at.getTime() <= now + 30_000) at.setTime(at.getTime() + 24 * 60 * 60 * 1000);
+        if (at.getTime() <= horizon) {
+          notifications.push({
+            tag,
+            at: at.getTime(),
+            title: `Expiring soon: ${label}`,
+            body: `Batch ${idx} expires in ${d} day(s) (${date}).`,
+            data: { productId: p.id, batch: idx, expiry: date },
+          });
+        }
+        // Also on the expiry day itself at 9:00 AM.
+        const day = parseISO(date);
+        day.setHours(9, 0, 0, 0);
+        if (day.getTime() > now + 60_000 && day.getTime() <= horizon) {
+          notifications.push({
+            tag: `${tag}-day`,
+            at: day.getTime(),
+            title: `Expires today: ${label}`,
+            body: `Batch ${idx} reaches its expiry date today.`,
+            data: { productId: p.id, batch: idx, expiry: date },
+          });
+        }
+      }
+    });
+  }
+
+  reg.active.postMessage({ type: "SCHEDULE_NOTIFICATIONS", notifications });
+
+  // Try to register periodic background sync (best effort; supported only on
+  // some Chromium WebViews / installed PWAs).
+  try {
+    const periodicSync = (reg as any).periodicSync;
+    if (periodicSync && periodicSync.register) {
+      await periodicSync.register("expiry-check", {
+        minInterval: 6 * 60 * 60 * 1000,
+      });
+    }
+  } catch {
+    /* not supported */
+  }
+}
+
